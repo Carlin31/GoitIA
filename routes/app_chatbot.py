@@ -14,9 +14,6 @@ data_dir_chroma = os.path.join(project_root, 'data', 'chroma_db_web')
 if project_root not in sys.path:
     sys.path.append(project_root)
 
-# --- IMPORTS DE BASE DE DATOS (MongoDB) ---
-from database import faq_collection, insert_faq, update_faq
-
 # --- IMPORTS DE MODELOS ---
 from models import modelo_knn
 from models import modelo_llm
@@ -35,31 +32,6 @@ MATRICULA_REGEX = re.compile(r'^[Ss]\d{8}$')
 # Toda la inicialización de KNN y LLM ocurre de forma diferida en la primera consulta.
 selector = SelectorDeModelo(usar_knn=True, usar_llm=True)
 print("✅ Selector de modelos creado (inicialización de red diferida a la primera consulta).")
-
-
-# ──────────────────────────────────────────────────────────────
-# GUARDAR EN FAQ (MongoDB)
-# ──────────────────────────────────────────────────────────────
-
-def guardar_faq_db(pregunta: str, respuesta: str) -> None:
-    """Inserta o actualiza una FAQ no bloqueada; después recarga el modelo KNN."""
-    try:
-        registro_existente = faq_collection.find_one({"pregunta": pregunta})
-        if registro_existente:
-            # No sobreescribir si está bloqueada
-            if registro_existente.get('bloqueado', False):
-                return
-            update_faq(pregunta, respuesta)
-        else:
-            insert_faq(pregunta, respuesta)
-
-        try:
-            modelo_knn.inicializar_knn()
-        except Exception as e:
-            print(f"⚠️ Error recargando KNN: {e}")
-
-    except Exception as e:
-        print(f"❌ Error en DB FAQ: {e}")
 
 
 # ──────────────────────────────────────────────────────────────
@@ -82,7 +54,6 @@ def chat():
 
     data       = request.json
     user_input = data.get("message", "").strip()
-    mode       = data.get("mode", "normal")
     matricula  = data.get("matricula", "").strip().upper()
     programa   = data.get("programa", "").strip()
     history_raw = data.get("history", [])
@@ -91,7 +62,6 @@ def chat():
         return jsonify({"reply": "Por favor escribe algo."})
 
     # Formatear historial como texto para el LLM
-    # Se espera una lista de {role: 'user'|'assistant', content: '...'}
     historial_texto = ""
     if isinstance(history_raw, list) and history_raw:
         lineas = []
@@ -108,16 +78,11 @@ def chat():
                 lineas.append(f"Asistente: {content}")
         historial_texto = "\n".join(lineas)
 
-    forzar_llm = (mode == 'regenerate')
-
-    # selector.responder retorna (respuesta, fuente, bloqueado)
+    # Flujo: KNN primero → si hay coincidencia, devuelve del dataset estático
+    # Si no hay coincidencia, el LLM genera una respuesta dinámica (no se almacena)
     respuesta_limpia, fuente, bloqueado = selector.responder(
-        user_input, historial=historial_texto, forzar_llm=forzar_llm
+        user_input, historial=historial_texto
     )
-
-    # Guardar en FAQ cuando responde el LLM (nunca si está bloqueado)
-    if "LLM" in fuente and not bloqueado:
-        guardar_faq_db(user_input, respuesta_limpia)
 
     # Registrar la pregunta asociada a la matrícula
     try:

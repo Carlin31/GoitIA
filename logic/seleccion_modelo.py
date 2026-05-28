@@ -54,14 +54,14 @@ class SelectorDeModelo:
     # Lógica principal de respuesta
     # ──────────────────────────────────────────────────────────
 
-    def responder(self, pregunta, historial="", forzar_llm=False):
+    def responder(self, pregunta, historial=""):
         """
         Lógica híbrida de selección de modelo:
 
-        1. KNN: busca coincidencia semántica en el caché FAQ (inicialización diferida interna).
-           - FAQ BLOQUEADA + distancia aceptable → siempre devuelve esa respuesta (ignora forzar_llm).
-           - FAQ normal + distancia aceptable + no forzar_llm → devuelve desde caché.
-        2. LLM RAG: se usa cuando KNN no aplica o se fuerza regeneración (inicialización diferida aquí).
+        1. KNN: busca coincidencia semántica en el dataset estático de FAQs.
+           - Distancia aceptable → devuelve respuesta del dataset (no se modifica).
+        2. LLM RAG: se usa cuando KNN no encuentra coincidencia válida.
+           La respuesta del LLM NO se almacena ni modifica el dataset.
 
         Retorna: (respuesta: str, fuente: str, bloqueado: bool)
         """
@@ -75,9 +75,8 @@ class SelectorDeModelo:
                     print(f"[Selector] FAQ BLOQUEADA activada (distancia={distancia:.4f})")
                     return respuesta_knn, "KNN (Bloqueado)", True
 
-                if not forzar_llm:
-                    print(f"[Selector] KNN caché activado (distancia={distancia:.4f})")
-                    return respuesta_knn, "KNN (Caché Semántico)", False
+                print(f"[Selector] KNN activado (distancia={distancia:.4f})")
+                return respuesta_knn, "KNN (Dataset Estático)", False
 
         # 2. LLM RAG — inicializar si aún no está listo
         self._init_llm_si_necesario()

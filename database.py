@@ -36,7 +36,12 @@ def init_db():
     """Crea índices para optimizar búsquedas."""
     print("🔄 Inicializando colecciones e índices en MongoDB...")
 
-    faq_collection.create_index("pregunta", unique=False)
+    faq_collection.create_index("pregunta")
+    faq_collection.create_index("categoria")
+    faq_collection.create_index("fuente")
+    faq_collection.create_index("bloqueado")
+    faq_collection.create_index("fecha_creacion")
+    faq_collection.create_index([("categoria", 1), ("pregunta", 1)])
 
     access_log_collection.create_index("fecha")
     access_log_collection.create_index("ip")

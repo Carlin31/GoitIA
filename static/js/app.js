@@ -53,14 +53,10 @@ window.toggleContinueButton = function() {
     if (checkbox && btn) {
         if (checkbox.checked) {
             btn.disabled = false;
-            btn.style.backgroundColor = '';
-            btn.style.color = '';
             btn.style.cursor = 'pointer';
             btn.style.opacity = '1';
         } else {
             btn.disabled = true;
-            btn.style.backgroundColor = '';
-            btn.style.color = '';
             btn.style.cursor = 'not-allowed';
             btn.style.opacity = '';
         }
@@ -114,7 +110,6 @@ document.addEventListener('DOMContentLoaded', () => {
         console.log("🚧 Modo Pruebas: Mostrando modal de acceso obligatoriamente.");
         accessModal.style.display = 'flex';
 
-        // Mostrar paso 0 (matrícula), ocultar el resto
         const step0 = document.getElementById('step-matricula');
         const step1 = document.getElementById('step-program-selection');
         const step2 = document.getElementById('step-disclaimer');
@@ -122,7 +117,6 @@ document.addEventListener('DOMContentLoaded', () => {
         if (step1) step1.style.display = 'none';
         if (step2) step2.style.display = 'none';
 
-        // Enter en campo de matrícula avanza al siguiente paso
         const matriculaInput = document.getElementById('matricula-input');
         if (matriculaInput) {
             matriculaInput.addEventListener('keydown', (e) => {
@@ -136,15 +130,12 @@ document.addEventListener('DOMContentLoaded', () => {
     const chatInput         = document.getElementById('chat-input-field');
     const messagesContainer = document.getElementById('chat-messages-container');
     const loadingFace       = document.getElementById('loading-face');
-    const btnRegenerate     = document.getElementById('btn-regenerate');
 
     if (!chatForm || !messagesContainer) return;
 
     // Historial de conversación en memoria: [{role, content}, ...]
-    // Se envía con cada petición para que el LLM mantenga contexto
     const conversationHistory = [];
 
-    // FUNCIONES DE INTERFAZ CHAT
     function addMessage(text, sender) {
         const div = document.createElement('div');
         div.classList.add('message', sender);
@@ -163,35 +154,12 @@ document.addEventListener('DOMContentLoaded', () => {
         messagesContainer.scrollTo({ top: messagesContainer.scrollHeight, behavior: 'smooth' });
     }
 
-    function removeLastBotMessage() {
-        const lastElement = messagesContainer.lastElementChild;
-        if (lastElement && lastElement.classList.contains('bot')) {
-            lastElement.remove();
-        } else {
-            const botMessages = messagesContainer.querySelectorAll('.message.bot');
-            if (botMessages.length > 0) botMessages[botMessages.length - 1].remove();
-        }
-    }
-
     // FETCH AL BACKEND (incluye matrícula, programa e historial de conversación)
-    async function sendMessage(message, mode = 'normal') {
-        if (mode === 'regenerate') {
-            // En regenerar: quitamos la última respuesta del historial para reemplazarla
-            if (conversationHistory.length > 0 &&
-                conversationHistory[conversationHistory.length - 1].role === 'assistant') {
-                conversationHistory.pop();
-            }
-            if (btnRegenerate) btnRegenerate.style.display = 'none';
-            if (loadingFace)   loadingFace.style.display   = 'block';
-        } else {
-            // Mensaje nuevo: añadimos al historial antes de enviar
-            conversationHistory.push({ role: 'user', content: message });
-            addMessage(message, 'user');
-            chatInput.value = '';
-            if (loadingFace)   loadingFace.style.display   = 'block';
-            if (btnRegenerate) btnRegenerate.style.display = 'none';
-        }
-
+    async function sendMessage(message) {
+        conversationHistory.push({ role: 'user', content: message });
+        addMessage(message, 'user');
+        chatInput.value = '';
+        if (loadingFace) loadingFace.style.display = 'block';
         messagesContainer.scrollTop = messagesContainer.scrollHeight;
 
         try {
@@ -200,10 +168,9 @@ document.addEventListener('DOMContentLoaded', () => {
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({
                     message:   message,
-                    mode:      mode,
                     matricula: selectedMatricula,
                     programa:  selectedPrograma,
-                    history:   conversationHistory.slice(-8),   // últimos 4 intercambios
+                    history:   conversationHistory.slice(-8),
                 })
             });
 
@@ -218,16 +185,7 @@ document.addEventListener('DOMContentLoaded', () => {
                 messagesContainer.appendChild(divError);
             } else {
                 addMessage(data.reply, 'bot');
-                // Guardar respuesta del asistente en el historial
                 conversationHistory.push({ role: 'assistant', content: data.reply });
-
-                // Si la respuesta está bloqueada por el admin, ocultar botón de regenerar
-                if (btnRegenerate) {
-                    btnRegenerate.style.display = data.bloqueado ? 'none' : 'inline-block';
-                    btnRegenerate.title = data.bloqueado
-                        ? 'Esta respuesta no puede ser regenerada'
-                        : 'Regenerar respuesta';
-                }
             }
         } catch (error) {
             if (loadingFace) loadingFace.style.display = 'none';
@@ -240,17 +198,6 @@ document.addEventListener('DOMContentLoaded', () => {
     chatForm.addEventListener('submit', (e) => {
         e.preventDefault();
         const message = chatInput.value.trim();
-        if (message) sendMessage(message, 'normal');
+        if (message) sendMessage(message);
     });
-
-    if (btnRegenerate) {
-        btnRegenerate.addEventListener('click', () => {
-            const userMessages = messagesContainer.querySelectorAll('.message.user');
-            if (userMessages.length > 0) {
-                const lastUserMessage = userMessages[userMessages.length - 1].textContent;
-                removeLastBotMessage();
-                sendMessage(lastUserMessage, 'regenerate');
-            }
-        });
-    }
 });
